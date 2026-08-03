@@ -1,127 +1,110 @@
-<div align="center">
-  <img src="nodes/telegram.svg" alt="Telegram" width="96" height="96" />
+# n8n-nodes-telegram-polling
 
-# @mentoster/n8n-nodes-telegram-polling
+An [n8n](https://n8n.io/) Community Node trigger that receives updates from Telegram using Bot API long polling (`getUpdates`), with full support for Telegram **Media Groups (Albums)**.
 
-Telegram trigger for n8n using the Bot API `getUpdates` long polling method (no webhooks).
+## Features
 
-[![npm](https://img.shields.io/npm/v/@mentoster/n8n-nodes-telegram-polling)](https://www.npmjs.com/package/@mentoster/n8n-nodes-telegram-polling)
+- **Media Group Aggregation**: When Telegram sends multiple media items (photos, videos, documents) as separate updates sharing a `media_group_id`, this node buffers the updates and emits **ONE** n8n item containing all media items for the album.
+- **Caption Propagation**: Telegram typically includes a caption on only one item of an album. This node automatically finds the caption and propagates it to the top-level album object as well as every media element inside the `media` array.
+- **Album Buffering Strategy**: In-memory buffer keyed by `media_group_id`. Uses a configurable timeout (default `1000 ms`). Each new update for an album resets the timer, ensuring all album items are captured.
+- **Single Message Compatibility**: Standard messages without a `media_group_id` emit immediately in the original format without delay or breaking changes.
+- **Long Polling & Offline Update Recovery**: Uses Telegram Bot API long polling (`getUpdates`) with strictly sequential update offsets (`update_id + 1`). If n8n or the node goes offline, pending updates queued by Telegram are retrieved and processed without loss or skipping.
+- **Strict TypeScript Types**: Exposes type definitions for `AlbumItem`, `TelegramMedia`, `AlbumBuffer`, `TelegramMessage`, and `TelegramUpdate`.
 
-</div>
+## Polling Behavior & Offline Recovery
 
-> [!NOTE]
-> This is continuous work on a fork of `bergi9/n8n-nodes-telegram-polling`.
+The node continuously polls the Telegram Bot API `getUpdates` endpoint. To ensure reliability:
+- Tracks the latest received `update_id` and requests updates starting at `offset = lastUpdateId + 1`.
+- Retains queued updates during downtime so no messages are lost when n8n restarts.
+- Does not switch to webhooks or introduce update skipping logic.
 
-## What it does
+## Album Buffering Strategy
 
-This community node adds a trigger node that continuously polls Telegram for updates and starts your workflow whenever a new update arrives.
+Telegram transmits albums as distinct updates sent in rapid succession. When an update containing a `media_group_id` arrives:
+1. The message is stored in an in-memory buffer for that `media_group_id`.
+2. A timer is started (default: 1000ms).
+3. If another message arrives with the same `media_group_id` before the timer expires, it is added to the buffer and the timer restarts.
+4. When 1000ms passes without new messages for that album, the album is marked complete, converted to an `AlbumItem`, emitted as a single n8n execution, and removed from the buffer.
 
-- Uses Telegram Bot API `getUpdates` with long polling (`timeout` defaults to `60` seconds).
-- Emits one n8n item per Telegram `Update` (raw JSON).
-- Supports filtering by update type, chat IDs, and user IDs.
+## Output Format
 
-## When to use polling (instead of webhooks)
+### For Albums (Media Groups)
 
-Polling is a good fit when webhooks are hard or impossible to run reliably:
+```json
+{
+  "mediaGroupId": "13425890123456789",
+  "caption": "Vacation photos from the mountains!",
+  "text": "Vacation photos from the mountains!",
+  "chat": {
+    "id": 12345678,
+    "type": "private",
+    "first_name": "Jane",
+    "username": "janedoe"
+  },
+  "from": {
+    "id": 12345678,
+    "is_bot": false,
+    "first_name": "Jane",
+    "username": "janedoe"
+  },
+  "date": 1700000000,
+  "messageIds": [101, 102, 103],
+  "media": [
+    {
+      "type": "photo",
+      "file_id": "AgACAgIAAxkBAA...",
+      "file_unique_id": "AQAD...",
+      "width": 1280,
+      "height": 960,
+      "caption": "Vacation photos from the mountains!"
+    },
+    {
+      "type": "photo",
+      "file_id": "AgACAgIAAxkBAB...",
+      "file_unique_id": "AQAE...",
+      "width": 1280,
+      "height": 960,
+      "caption": "Vacation photos from the mountains!"
+    }
+  ],
+  "rawMessages": [ ... ]
+}
+```
 
-- Your n8n instance is not reachable from the public internet (CGNAT, private network).
-- You cannot expose a stable public HTTPS endpoint.
-- You prefer a single outbound connection model.
+### For Single Messages
 
-> [!IMPORTANT]
-> Long polling keeps your workflow trigger active. Run it on a stable n8n instance and avoid running multiple copies of the same trigger with the same bot token.
+Standard Telegram message updates emit immediately in the native format:
+
+```json
+{
+  "message_id": 104,
+  "from": {
+    "id": 12345678,
+    "is_bot": false,
+    "first_name": "Jane"
+  },
+  "chat": {
+    "id": 12345678,
+    "type": "private"
+  },
+  "date": 1700000100,
+  "text": "Hello n8n!"
+}
+```
+
+## Node Settings
+
+- **Updates**: Multi-select types of updates to listen for (`Message`, `Edited Message`, `Channel Post`, `Edited Channel Post`, `Callback Query`).
+- **Album Timeout (ms)**: Timeout in milliseconds to wait for subsequent media items in an album before emitting (default: `1000`).
+- **Restrict User IDs**: Optional comma-separated list of Telegram User IDs allowed to trigger the node.
 
 ## Installation
 
-### Install via n8n UI (recommended)
+In your n8n instance:
+1. Go to **Settings > Community Nodes**.
+2. Click **Install**.
+3. Enter `@mentoster/n8n-nodes-telegram-polling`.
 
-1. In n8n, open **Settings** > **Community nodes**.
-2. Choose **Install** and enter: `@mentoster/n8n-nodes-telegram-polling`.
-3. Restart n8n if prompted.
+## License
 
-### Install manually (custom nodes folder)
-
-If you manage community nodes manually, install the package in your custom nodes directory (commonly `~/.n8n/custom`):
-
-```bash
-npm install @mentoster/n8n-nodes-telegram-polling
-```
-
-> [!TIP]
-> If you run n8n with Docker, make sure your custom nodes folder is mounted as a volume so the install persists across restarts.
-
-## Credentials
-
-The trigger expects an n8n credential named `telegramApi` with an `accessToken` (your bot token).
-
-1. Create a Telegram bot with [@BotFather](https://t.me/botfather) and copy the token.
-2. In n8n, create a credential for Telegram and paste the token.
-
-> [!WARNING]
-> This repository currently does not ship a credential type implementation under `credentials/` (see `credentials/AGENTS.md`).
-> If your n8n version does not already provide `telegramApi`, you will need to add a credential definition to this package.
-
-## Usage
-
-1. Add the node **Telegram Trigger (long polling) Trigger** to your workflow.
-2. Select the update types you care about.
-3. (Optional) Restrict by chat IDs and/or user IDs.
-4. Activate the workflow.
-
-Each incoming Telegram update is emitted as a separate item. The item JSON is the raw Telegram `Update` object.
-
-## Configuration
-
-| Parameter         | Type             | Default | Notes                                                                                                                                                                             |
-| ----------------- | ---------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `updates`         | multi-select     | `[]`    | Update types to accept. Selecting `*` makes the node send `allowed_updates: []` (Telegram default: all types except `chat_member`, `message_reaction`, `message_reaction_count`). |
-| `limit`           | number           | `50`    | Max updates returned per request.                                                                                                                                                 |
-| `timeout`         | number (seconds) | `60`    | Long polling timeout passed to Telegram.                                                                                                                                          |
-| `restrictChatIds` | string           | `''`    | Comma/space-separated chat IDs to allow.                                                                                                                                          |
-| `restrictUserIds` | string           | `''`    | Comma/space-separated user IDs to allow.                                                                                                                                          |
-
-Supported update types include: `message`, `edited_message`, `channel_post`, `edited_channel_post`, `callback_query`, `inline_query`, `chosen_inline_result`, `shipping_query`, `pre_checkout_query`, `poll`, `poll_answer`, `chat_member`, `my_chat_member`, `chat_join_request`.
-
-> [!NOTE]
-> If you need `chat_member` / `my_chat_member` updates, select them explicitly. Using `*` makes the node send `allowed_updates: []`, which uses Telegram's default subscription that excludes `chat_member`.
-
-### Chat and user restrictions
-
-- Both `restrictChatIds` and `restrictUserIds` accept a list split on commas and/or whitespace.
-- If you configure a restriction, updates that do not include the corresponding chat/user field are filtered out.
-
-> [!TIP]
-> To discover a chat ID or user ID, temporarily run without restrictions and inspect the emitted update JSON (for example `message.chat.id` or `message.from.id`).
-
-## How it works
-
-- The node calls `https://api.telegram.org/bot<TOKEN>/getUpdates` in a loop.
-- It maintains an `offset` and advances it to `last_update_id + 1` to avoid re-processing updates.
-- On workflow deactivation, it aborts the in-flight request and stops polling.
-
-## Development
-
-```bash
-npm install
-npm run build
-npm run lint
-npm run test:unit
-npm test
-```
-
-`npm test` runs the unit tests with a strict 100% coverage gate (statements/branches/functions/lines) for the runtime node sources. Coverage reports are written to `coverage/` (gitignored).
-
-> [!NOTE]
-> Do not edit `dist/` directly. It is generated by `npm run build` and is what gets published to npm.
-
-## Troubleshooting
-
-- No updates arriving: verify the bot token, and ensure the bot can receive messages in the relevant chat.
-- No updates arriving after you previously used webhooks: `getUpdates` won't work while a webhook is set. Remove the webhook (for example using Telegram's `deleteWebhook`).
-- Updates arriving but filtered out: remove `restrictChatIds` / `restrictUserIds` temporarily and inspect the emitted JSON.
-- Running multiple instances: only one long-polling consumer should be active per bot; duplicates can lead to missed/conflicting consumption.
-
-## References
-
-- Telegram Bot API: `getUpdates` - https://core.telegram.org/bots/api#getupdates
-- n8n community nodes documentation: https://docs.n8n.io/integrations/community-nodes/
+[MIT](LICENSE)
