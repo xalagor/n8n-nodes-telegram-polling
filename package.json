@@ -1,5 +1,5 @@
 {
-  "name": "@mentoster/n8n-nodes-telegram-polling",
+  "name": "@xalagor/n8n-nodes-telegram-polling",
   "version": "1.1.0",
   "description": "n8n community node for Telegram polling with media group aggregation support",
   "keywords": [
@@ -11,10 +11,10 @@
     "album"
   ],
   "license": "MIT",
-  "homepage": "https://github.com/mentoster/n8n-nodes-telegram-polling",
+  "homepage": "https://github.com/xalagor/n8n-nodes-telegram-polling",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mentoster/n8n-nodes-telegram-polling.git"
+    "url": "git+https://github.com/xalagor/n8n-nodes-telegram-polling.git"
   },
   "main": "dist/nodes/TelegramPolling/TelegramPollingTrigger.node.js",
   "scripts": {

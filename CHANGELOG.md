@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to `@mentoster/n8n-nodes-telegram-polling` will be documented in this file.
+All notable changes to `@xalagor/n8n-nodes-telegram-polling` will be documented in this file.
 
 ## [1.1.0] - 2026-08-03
 

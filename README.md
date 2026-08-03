@@ -103,7 +103,7 @@ Standard Telegram message updates emit immediately in the native format:
 In your n8n instance:
 1. Go to **Settings > Community Nodes**.
 2. Click **Install**.
-3. Enter `@mentoster/n8n-nodes-telegram-polling`.
+3. Enter `@xalagor/n8n-nodes-telegram-polling`.
 
 ## License
 
